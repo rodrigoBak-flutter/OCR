@@ -2,47 +2,34 @@ import pytesseract
 import cv2
 import re
 import json
-import numpy as np
 
-# Configurar la ruta de Tesseract
+# Configurar la ruta de Tesseract (ajústala según tu sistema)
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
 def procesar_ticket(ruta_imagen):
     # Cargar la imagen
     image = cv2.imread(ruta_imagen)
 
-    # Verificar si la imagen se cargó correctamente
     if image is None:
-        print("Error: No se pudo cargar la imagen. Verifica la ruta del archivo.")
+        print("Error: No se pudo cargar la imagen.")
         return
 
     print("Imagen cargada correctamente.")
 
-    # Convertir a escala de grises
+    # Convertir a escala de grises y aplicar preprocesamiento
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    blurred = cv2.GaussianBlur(gray, (9, 9), 0)  # Mejor filtro para OCR
+    thresh = cv2.adaptiveThreshold(blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 17, 3)
 
-    # Aplicar un suavizado para reducir el ruido
-    blurred = cv2.GaussianBlur(gray, (9, 9), 0)
-
-    # Aplicar umbralización adaptativa
-    thresh = cv2.adaptiveThreshold(
-        blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 17, 3
-    )
-
-    # Guardar la imagen preprocesada (opcional, para verificar)
-    cv2.imwrite('preprocessed_image.jpg', thresh)
-
-    # Aplicar OCR con configuración mejorada
+    # Aplicar OCR con mejor configuración
     try:
-        texto = pytesseract.image_to_string(thresh, lang='spa', config='--psm 6 --oem 1')
+        texto = pytesseract.image_to_string(thresh, lang='spa', config='--psm 3')
     except Exception as e:
         print(f"Error al aplicar OCR: {e}")
         return
 
-    # Imprimir el texto extraído
     print('ACA ESTA EL TEXTO DEL TICKET:\n', texto)
 
-  
     # Extraer datos relevantes
     datos = extraer_datos(texto)
 
@@ -52,6 +39,8 @@ def procesar_ticket(ruta_imagen):
 
     print("Datos guardados en 'datos_ticket.json'.")
 
+
+
 def extraer_datos(texto):
     datos = {
         "fecha": None,
@@ -59,31 +48,44 @@ def extraer_datos(texto):
         "total": None,
     }
 
-    # Convertir el texto en líneas
+    # Limpiar texto (eliminar caracteres raros y convertir a ASCII básico)
+    texto = re.sub(r'[^\x20-\x7EñÑáéíóúÁÉÍÓÚ€]', ' ', texto)  # Mantener caracteres relevantes
     lineas = texto.split('\n')
 
-    # Buscar palabras clave en cada línea
+    # Expresiones regulares mejoradas
+    patron_fecha = re.compile(r'\b\d{2}/\d{2}/\d{4}\b')
+    patron_cif_nif = re.compile(r'(?:N[.\s]*I[.\s]*F|CIF)[.: ]*([A-HJNP-SUVWXYZ0-9.-]{8,})')
+    patron_total = re.compile(r'(?:TOTAL(?:\s*€)?|Pendiente de Cobro|Base Imp)[^\d]*(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?)')
+
     for linea in lineas:
-        # Extraer la fecha
-        if "FECHA" in linea.upper():
-            fecha = linea.split("FECHA")[-1].strip()
-            datos["fecha"] = re.sub(r'[^0-9/]', '', fecha)  # Limpiar la fecha
+        # Buscar fecha
+        if datos["fecha"] is None:
+            coincidencia_fecha = patron_fecha.search(linea)
+            if coincidencia_fecha:
+                datos["fecha"] = coincidencia_fecha.group(0)
 
-        # Extraer el CIF
-        if "CIF" in linea.upper():
-            cif = linea.split("CIF")[-1].strip()
-            datos["cif"] = re.sub(r'[^A-Z0-9-]', '', cif)  # Limpiar el CIF
+        # Buscar CIF/NIF
+        if datos["cif"] is None:
+            coincidencia_cif = patron_cif_nif.search(linea)
+            if coincidencia_cif:
+                datos["cif"] = re.sub(r'[^A-Z0-9]', '', coincidencia_cif.group(1))  # Limpiar caracteres extraños
 
-        # Extraer el total
-        if "TOTAL" in linea.upper():
-            total = linea.split("TOTAL")[-1].strip()
-            total = re.sub(r'[^0-9,]', '', total)  # Limpiar el total
+        # Buscar total
+        coincidencia_total = patron_total.search(linea)
+        if coincidencia_total:
+            total_texto = coincidencia_total.group(1)
+
+            # Reemplazar comas por puntos y eliminar espacios
+            total_texto = total_texto.replace(' ', '').replace(',', '.')
+
             try:
-                datos["total"] = float(total.replace(',', '.'))
+                total_float = float(total_texto)
+                # Tomar el mayor total encontrado
+                if datos["total"] is None or total_float > datos["total"]:
+                    datos["total"] = total_float
             except ValueError:
                 pass
 
     return datos
-
 # Llamar a la función con la ruta de la imagen
-procesar_ticket('C:\\Users\\rodri\\Desktop\\ticket-1.jpg')
+procesar_ticket('C:\\Users\\rodri\\Desktop\\ticket.jpg')
