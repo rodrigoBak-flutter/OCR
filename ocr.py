@@ -1,6 +1,8 @@
 import pytesseract
 import cv2
 import re
+import json
+import numpy as np
 
 # Configurar la ruta de Tesseract
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
@@ -19,8 +21,13 @@ def procesar_ticket(ruta_imagen):
     # Convertir a escala de grises
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-    # Aplicar umbralización simple
-    _, thresh = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)
+    # Aplicar un suavizado para reducir el ruido
+    blurred = cv2.GaussianBlur(gray, (9, 9), 0)
+
+    # Aplicar umbralización adaptativa
+    thresh = cv2.adaptiveThreshold(
+        blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 17, 3
+    )
 
     # Guardar la imagen preprocesada (opcional, para verificar)
     cv2.imwrite('preprocessed_image.jpg', thresh)
@@ -35,49 +42,48 @@ def procesar_ticket(ruta_imagen):
     # Imprimir el texto extraído
     print('ACA ESTA EL TEXTO DEL TICKET:\n', texto)
 
-    # Guardar el texto en un archivo
-    with open('texto_extraido.txt', 'w', encoding='utf-8') as f:
-        f.write(texto)
+  
+    # Extraer datos relevantes
+    datos = extraer_datos(texto)
 
-    # Buscar el total del ticket usando expresiones regulares
-    patron_total = re.compile(r'total.*?(\d+[.,]\d+)', re.IGNORECASE)
-    coincidencias = patron_total.search(texto)
+    # Guardar los datos en un archivo JSON
+    with open('datos_ticket.json', 'w', encoding='utf-8') as f:
+        json.dump(datos, f, ensure_ascii=False, indent=4)
 
-    if coincidencias:
-        total = coincidencias.group(1).replace(',', '.')  # Convertir coma a punto para manejar decimales
-        try:
-            total = float(total)  # Validar que el total sea un número válido
-            print(f"Total del ticket: {total:.2f} €")
-        except ValueError:
-            print("El total encontrado no es un número válido.")
-    else:
-        print("No se encontró el total del ticket.")
+    print("Datos guardados en 'datos_ticket.json'.")
 
-    # Extraer otros datos (opcional)
-    extraer_datos_adicionales(texto)
+def extraer_datos(texto):
+    datos = {
+        "fecha": None,
+        "cif": None,
+        "total": None,
+    }
 
-def extraer_datos_adicionales(texto):
-    # Buscar la fecha
-    patron_fecha = re.compile(r'fecha:\s*(\d{2}/\d{2}/\d{4})', re.IGNORECASE)
-    coincidencias_fecha = patron_fecha.search(texto)
-    if coincidencias_fecha:
-        fecha = coincidencias_fecha.group(1)
-        print(f"Fecha: {fecha}")
+    # Convertir el texto en líneas
+    lineas = texto.split('\n')
 
-    # Buscar la hora
-    patron_hora = re.compile(r'hora:\s*(\d{2}:\d{2})', re.IGNORECASE)
-    coincidencias_hora = patron_hora.search(texto)
-    if coincidencias_hora:
-        hora = coincidencias_hora.group(1)
-        print(f"Hora: {hora}")
+    # Buscar palabras clave en cada línea
+    for linea in lineas:
+        # Extraer la fecha
+        if "FECHA" in linea.upper():
+            fecha = linea.split("FECHA")[-1].strip()
+            datos["fecha"] = re.sub(r'[^0-9/]', '', fecha)  # Limpiar la fecha
 
-    # Buscar los ítems comprados
-    patron_items = re.compile(r'(\d+,\d{3})\s+([A-Z\s]+)\s+(\d+,\d{2})\s+(\d+,\d{2})')
-    items = patron_items.findall(texto)
-    if items:
-        print("\nÍtems comprados:")
-        for item in items:
-            print(f"{item[1].strip()} - Cantidad: {item[0]} - Precio: {item[2]} € - Total: {item[3]} €")
+        # Extraer el CIF
+        if "CIF" in linea.upper():
+            cif = linea.split("CIF")[-1].strip()
+            datos["cif"] = re.sub(r'[^A-Z0-9-]', '', cif)  # Limpiar el CIF
+
+        # Extraer el total
+        if "TOTAL" in linea.upper():
+            total = linea.split("TOTAL")[-1].strip()
+            total = re.sub(r'[^0-9,]', '', total)  # Limpiar el total
+            try:
+                datos["total"] = float(total.replace(',', '.'))
+            except ValueError:
+                pass
+
+    return datos
 
 # Llamar a la función con la ruta de la imagen
-procesar_ticket('C:\\Users\\rodri\\Desktop\\ticket.jpg')
+procesar_ticket('C:\\Users\\rodri\\Desktop\\ticket-1.jpg')
