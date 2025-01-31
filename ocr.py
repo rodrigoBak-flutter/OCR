@@ -40,7 +40,6 @@ def procesar_ticket(ruta_imagen):
     print("Datos guardados en 'datos_ticket.json'.")
 
 
-
 def extraer_datos(texto):
     datos = {
         "fecha": None,
@@ -55,7 +54,7 @@ def extraer_datos(texto):
     # Expresiones regulares mejoradas
     patron_fecha = re.compile(r'\b\d{2}/\d{2}/\d{4}\b')
     patron_cif_nif = re.compile(r'(?:N[.\s]*I[.\s]*F|CIF)[.: ]*([A-HJNP-SUVWXYZ0-9.-]{8,})')
-    patron_total = re.compile(r'(?:TOTAL(?:\s*€)?|Pendiente de Cobro|Base Imp)[^\d]*(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?)')
+    patron_total = re.compile(r'(?:TOTAL|Tota1|Pendiente de Cobro|Base Imp)[^\d]*(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?)')
 
     for linea in lineas:
         # Buscar fecha
@@ -87,5 +86,6 @@ def extraer_datos(texto):
                 pass
 
     return datos
+
 # Llamar a la función con la ruta de la imagen
-procesar_ticket('C:\\Users\\rodri\\Desktop\\ticket.jpg')
+procesar_ticket('C:\\Users\\rodri\\Desktop\\ticket-1.jpg')
