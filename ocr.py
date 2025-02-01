@@ -88,4 +88,4 @@ def extraer_datos(texto):
     return datos
 
 # Llamar a la función con la ruta de la imagen
-procesar_ticket('C:\\Users\\rodri\\Desktop\\ticket-1.jpg')
+procesar_ticket('C:\\Users\\your-route\\Desktop\\ticket-1.jpg')
